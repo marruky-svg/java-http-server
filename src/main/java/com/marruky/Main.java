@@ -1,5 +1,6 @@
 package com.marruky;
 
+import com.marruky.Http.HttpClient;
 import com.marruky.Http.HttpParser;
 import com.marruky.Http.HttpRequest;
 import com.marruky.Http.HttpResponse;
@@ -20,18 +21,23 @@ import java.util.concurrent.Executors;
 public class Main {
     public static void main(String[] args) {
         try {
+            HttpClient client = new HttpClient();
+            String result = client.post("localhost", 8083, "/analyse", ">isolado_1\nATCGATCGATCG\n>isolado_2\nTTTTAAAACCCC");
+            System.out.println(result);
+
+
             ServerSocket serverSocket = new ServerSocket(8082);
             System.out.println("Server listen on port 8082");
             ExecutorService executor = Executors.newFixedThreadPool(10);
 
             Map<String, String> headers = new HashMap<>();
             headers.put("Content-Type", "text/json");
-            headers.put("Content-Length","");
+            headers.put("Content-Length", "");
             headers.put("Connection", "");
             String body_route = "A resposta é esta e esta tudo certo";
             String body_error = "HE-HE";
             Router router = new Router();
-            router.register("/users", "GET", request1 -> new HttpResponse(200,"OK", headers, body_route));
+            router.register("/users", "GET", request1 -> new HttpResponse(200, "OK", headers, body_route));
             router.register("/users", "POST", request1 -> new HttpResponse(201, "CREATED", headers, body_error));
             router.register("/products", "POST", request -> new HttpResponse(201, "CREATED", headers, body_route));
 
@@ -56,13 +62,12 @@ public class Main {
                         OutputStream os = socket.getOutputStream();
                         os.write(responseBytes);
                         socket.close();
-                    }catch (Exception e) {
+                    } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
                 });
-
-
             }
+
         } catch (IOException e) {
             throw new RuntimeException("Server error: " + e);
         }

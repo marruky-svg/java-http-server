@@ -7,7 +7,9 @@ import com.marruky.Routes.Handler;
 import com.marruky.Routes.Router;
 import com.marruky.db.DatabaseConnection;
 import com.marruky.repository.AmrResultRepository;
+import com.marruky.repository.AnalyseResultRepository;
 import com.marruky.repository.AnalysisJobRepository;
+import com.marruky.repository.CompareResultRepository;
 
 import javax.management.ObjectName;
 import java.io.*;
@@ -75,7 +77,15 @@ public class Main {
                 if (validationResult.isValid()) {
                     HttpClient client = new HttpClient();
                     String resultBody = client.post("localhost", 8083, "/compare", request.getBody());
-                    return new HttpResponse(200, "OK", headers, resultBody);
+                    JsonParser parser = new JsonParser();
+                    Map<String, Object> sequences = parser.parser(resultBody);
+                    AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
+                    CompareResultRepository repo = new CompareResultRepository();
+                    int jobId = analysisJobRepository.save("COMPARE", "completed");
+                    int compareId = repo.save(jobId, sequences.get("isoladoA").toString(), sequences.get("isoladoB").toString(),
+                            Integer.parseInt(sequences.get("score").toString()), Double.parseDouble(sequences.get("similarity").toString()),
+                            sequences.get("alignedA").toString(), sequences.get("alignedB").toString());
+                    return new HttpResponse(200, "Compare saved with id: " + compareId, headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
@@ -86,7 +96,20 @@ public class Main {
                 if (validationResult.isValid()) {
                     HttpClient client = new HttpClient();
                     String resultBody = client.post("localhost", 8083, "/analyse", request.getBody());
-                    return new HttpResponse(200, "OK", headers, resultBody);
+                    JsonParser parser = new JsonParser();
+                    int analyseId = 0;
+                    List<Map<String, Object>> sequences = parser.parserArray(resultBody);
+                    AnalysisJobRepository repo = new AnalysisJobRepository();
+                    AnalyseResultRepository analyseResultRepository = new AnalyseResultRepository();
+                    int jobId = repo.save("ANALYSE", "completed");
+                    for (Map<String, Object> sequence : sequences) {
+                        Object isoladoId = sequence.get("id");
+                           analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
+                                    Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
+                                    Double.parseDouble(sequence.get("gcContent").toString()));
+
+                    }
+                    return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });

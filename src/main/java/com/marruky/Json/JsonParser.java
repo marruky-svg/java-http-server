@@ -60,7 +60,7 @@ public class JsonParser {
         return result;
     }
 
-    public String extractValue(String json, int startIndex) {
+    private String extractValue(String json, int startIndex) {
         if (json.charAt(startIndex) == '"') {
             StringBuilder value = new StringBuilder("\"");
             int i = startIndex + 1;

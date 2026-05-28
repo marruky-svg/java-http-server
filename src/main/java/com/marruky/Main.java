@@ -9,6 +9,7 @@ import com.marruky.db.DatabaseConnection;
 import com.marruky.repository.AmrResultRepository;
 import com.marruky.repository.AnalysisJobRepository;
 
+import javax.management.ObjectName;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -29,11 +30,6 @@ public class Main {
             int id = jobRepository.save("analyse", "completed");
             System.out.println("Job saved with id: " + id);
 
-            JsonParser jsonParser = new JsonParser();
-            String testJson = "[{\"id\": \"isolado_1\",\"genes\": [{\"gene\": \"blaTEM-1\",\"antibioticClass\": \"Penicillin\",\"similarity\": 100.0,\"score\": 69}]}]";
-            List<Map<String, Object>> parsed = jsonParser.parserArray(testJson);
-            System.out.println(parsed);
-
             ServerSocket serverSocket = new ServerSocket(8082);
             System.out.println("Server listen on port 8082");
             ExecutorService executor = Executors.newFixedThreadPool(10);
@@ -47,27 +43,36 @@ public class Main {
             Router router = new Router();
             router.register("/users", "GET", request -> new HttpResponse(200, "OK", headers, body_route));
             router.register("/users", "POST", request -> new HttpResponse(201, "CREATED", headers, body_error));
+
+
             router.register("/amr", "POST", request -> {
                 FastaValidator validator = new FastaValidator();
-                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody());
-                if(validationResult.isValid()){
+                FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
+                if (validationResult.isValid()) {
                     HttpClient client = new HttpClient();
                     String resultBody = client.post("localhost", 8083, "/amr", request.getBody());
                     JsonParser parser = new JsonParser();
-
-                    //List<Map<String, Object>> body=  parser.parserArray(resultBody);
-                    //AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
-                    //int jobId = analysisJobRepository.save("amr_results", "completed");
-                    //AmrResultRepository amrResultRepository = new AmrResultRepository();
-                    //int amrId = amrResultRepository.save(jobId, body.get("isolado_id").toString(), body.get("gene").toString(), body.get("antibiotic_class").toString(),Double.parseDouble( body.get("similarity").toString()),Integer.parseInt(body.get("score").toString()));
-                    //return new HttpResponse(200, "Amr saved with id: " + amrId, headers, resultBody);
+                    List<Map<String, Object>> sequences = parser.parserArray(resultBody);
+                    AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
+                    AmrResultRepository repo = new AmrResultRepository();
+                    int amrId = 0;
+                    int jobId = analysisJobRepository.save("AMR", "completed");
+                    for (Map<String, Object> sequence : sequences) {
+                        Object isoladoId = sequence.get("id");
+                        List<Map<String, Object>> genes = (List<Map<String, Object>>) sequence.get("genes");
+                        for (Map<String, Object> gene : genes) {
+                          amrId = repo.save(jobId, isoladoId.toString(), gene.get("gene").toString(), gene.get("antibioticClass").toString(),
+                                    Double.parseDouble(gene.get("similarity").toString()), Integer.parseInt(gene.get("score").toString()));
+                        }
                     }
+                    return new HttpResponse(200, "Amr saved with id: " + amrId, headers, resultBody);
+                }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
-            router.register("/compare", "POST", request ->{
+            router.register("/compare", "POST", request -> {
                 FastaValidator validator = new FastaValidator();
-                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody(), 2);
-                if(validationResult.isValid()){
+                FastaValidator.ValidationResult validationResult = validator.validade(request.getBody(), 2);
+                if (validationResult.isValid()) {
                     HttpClient client = new HttpClient();
                     String resultBody = client.post("localhost", 8083, "/compare", request.getBody());
                     return new HttpResponse(200, "OK", headers, resultBody);
@@ -77,11 +82,11 @@ public class Main {
 
             router.register("/analyse", "POST", request -> {
                 FastaValidator validator = new FastaValidator();
-                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody());
-                if(validationResult.isValid()) {
+                FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
+                if (validationResult.isValid()) {
                     HttpClient client = new HttpClient();
                     String resultBody = client.post("localhost", 8083, "/analyse", request.getBody());
-                    return new HttpResponse(200 ,"OK", headers, resultBody);
+                    return new HttpResponse(200, "OK", headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });

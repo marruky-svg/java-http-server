@@ -1,19 +1,21 @@
 package com.marruky;
 
-import com.marruky.Http.HttpClient;
-import com.marruky.Http.HttpParser;
-import com.marruky.Http.HttpRequest;
-import com.marruky.Http.HttpResponse;
+import com.marruky.Http.*;
 import com.marruky.Json.JsonParser;
 import com.marruky.Json.JsonSerializer;
 import com.marruky.Routes.Handler;
 import com.marruky.Routes.Router;
+import com.marruky.db.DatabaseConnection;
+import com.marruky.repository.AmrResultRepository;
+import com.marruky.repository.AnalysisJobRepository;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,10 +23,16 @@ import java.util.concurrent.Executors;
 public class Main {
     public static void main(String[] args) {
         try {
-            HttpClient client = new HttpClient();
-            String result = client.post("localhost", 8083, "/analyse", ">isolado_1\nATCGATCGATCG\n>isolado_2\nTTTTAAAACCCC");
-            System.out.println(result);
 
+            Connection conn = DatabaseConnection.getConnection();
+            AnalysisJobRepository jobRepository = new AnalysisJobRepository();
+            int id = jobRepository.save("analyse", "completed");
+            System.out.println("Job saved with id: " + id);
+
+            JsonParser jsonParser = new JsonParser();
+            String testJson = "[{\"id\": \"isolado_1\",\"genes\": [{\"gene\": \"blaTEM-1\",\"antibioticClass\": \"Penicillin\",\"similarity\": 100.0,\"score\": 69}]}]";
+            List<Map<String, Object>> parsed = jsonParser.parserArray(testJson);
+            System.out.println(parsed);
 
             ServerSocket serverSocket = new ServerSocket(8082);
             System.out.println("Server listen on port 8082");
@@ -37,9 +45,47 @@ public class Main {
             String body_route = "A resposta é esta e esta tudo certo";
             String body_error = "HE-HE";
             Router router = new Router();
-            router.register("/users", "GET", request1 -> new HttpResponse(200, "OK", headers, body_route));
-            router.register("/users", "POST", request1 -> new HttpResponse(201, "CREATED", headers, body_error));
-            router.register("/products", "POST", request -> new HttpResponse(201, "CREATED", headers, body_route));
+            router.register("/users", "GET", request -> new HttpResponse(200, "OK", headers, body_route));
+            router.register("/users", "POST", request -> new HttpResponse(201, "CREATED", headers, body_error));
+            router.register("/amr", "POST", request -> {
+                FastaValidator validator = new FastaValidator();
+                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody());
+                if(validationResult.isValid()){
+                    HttpClient client = new HttpClient();
+                    String resultBody = client.post("localhost", 8083, "/amr", request.getBody());
+                    JsonParser parser = new JsonParser();
+
+                    //List<Map<String, Object>> body=  parser.parserArray(resultBody);
+                    //AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
+                    //int jobId = analysisJobRepository.save("amr_results", "completed");
+                    //AmrResultRepository amrResultRepository = new AmrResultRepository();
+                    //int amrId = amrResultRepository.save(jobId, body.get("isolado_id").toString(), body.get("gene").toString(), body.get("antibiotic_class").toString(),Double.parseDouble( body.get("similarity").toString()),Integer.parseInt(body.get("score").toString()));
+                    //return new HttpResponse(200, "Amr saved with id: " + amrId, headers, resultBody);
+                    }
+                return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
+            });
+            router.register("/compare", "POST", request ->{
+                FastaValidator validator = new FastaValidator();
+                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody(), 2);
+                if(validationResult.isValid()){
+                    HttpClient client = new HttpClient();
+                    String resultBody = client.post("localhost", 8083, "/compare", request.getBody());
+                    return new HttpResponse(200, "OK", headers, resultBody);
+                }
+                return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
+            });
+
+            router.register("/analyse", "POST", request -> {
+                FastaValidator validator = new FastaValidator();
+                FastaValidator.ValidationResult validationResult =  validator.validade(request.getBody());
+                if(validationResult.isValid()) {
+                    HttpClient client = new HttpClient();
+                    String resultBody = client.post("localhost", 8083, "/analyse", request.getBody());
+                    return new HttpResponse(200 ,"OK", headers, resultBody);
+                }
+                return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
+            });
+
 
             JsonSerializer serializer = new JsonSerializer();
             JsonParser parser = new JsonParser();
@@ -52,7 +98,7 @@ public class Main {
                 System.out.println("Client is connected");
                 executor.submit(() -> {
                     try {
-                        Thread.sleep(3000);
+
                         HttpRequest request = HttpParser.parser((socket.getInputStream()));
                         System.out.println("Method: " + request.getMethod());
                         System.out.println("Path: " + request.getPath());
@@ -68,7 +114,7 @@ public class Main {
                 });
             }
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Server error: " + e);
         }
     }

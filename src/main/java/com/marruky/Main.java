@@ -1,5 +1,6 @@
 package com.marruky;
 
+import auth.JwtService;
 import com.marruky.Http.*;
 import com.marruky.Json.JsonParser;
 import com.marruky.Json.JsonSerializer;
@@ -26,6 +27,12 @@ import java.util.concurrent.Executors;
 public class Main {
     public static void main(String[] args) {
         try {
+            JwtService jwt = new JwtService();
+            String token = jwt.generate("elder", "researcher");
+            System.out.println("Token: " + token);
+            System.out.println("Valid: " + jwt.verify(token));
+            System.out.println("Valid fake: " + jwt.verify(token + "x"));
+            System.out.println("Username: " + jwt.getUsername(token));
 
             Connection conn = DatabaseConnection.getConnection();
             AnalysisJobRepository jobRepository = new AnalysisJobRepository();
@@ -107,7 +114,6 @@ public class Main {
                            analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
                                     Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
                                     Double.parseDouble(sequence.get("gcContent").toString()));
-
                     }
                     return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
                 }

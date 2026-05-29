@@ -1,14 +1,12 @@
 package auth;
 
+import com.marruky.Http.HttpRequest;
 import com.marruky.Json.JsonParser;
 
 import javax.crypto.Mac;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
@@ -54,10 +52,15 @@ public class JwtService {
     }
 
     public boolean verify(String token) {
-       String[] parts = token.split("\\.");
-       String header = parts[0];
-       String payload = parts[1];
-       String signatureToken = parts[2];
+
+        String[] parts = token.split("\\.");
+        if(parts.length != 3) {
+            return false;
+        }
+        String header = parts[0];
+        String payload = parts[1];
+        String signatureToken = parts[2];
+
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
@@ -72,20 +75,33 @@ public class JwtService {
             Map<String, Object> map = parser.parser(payloadJson);
             double exp = Double.parseDouble(map.get("exp").toString());
 
-            if (exp < ((double) System.currentTimeMillis() /1000)) {
+            if (exp < ((double) System.currentTimeMillis() / 1000)) {
                 return false;
             }
             return true;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            return false;
         }
     }
 
-        public String getUsername(String token){
-            String[] parts = token.split("\\.");
-            String payload = parts[1];
-            String payloadJson = new String(Base64.getUrlDecoder().decode(payload));
-            Map<String, Object> map = new JsonParser().parser(payloadJson);
-            return map.get("sub").toString();
-        }
+    public String getUsername(String token) {
+        String[] parts = token.split("\\.");
+        String payload = parts[1];
+        String payloadJson = new String(Base64.getUrlDecoder().decode(payload));
+        Map<String, Object> map = new JsonParser().parser(payloadJson);
+        return map.get("sub").toString();
     }
+
+    public boolean authenticate(HttpRequest request) {
+        String authHeader = request.getHeaders().get("Authorization");
+        System.out.println("Auth header: " + authHeader);
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return false;
+        }
+        String token = authHeader.substring(7);
+        System.out.println("Token: " + token);
+        boolean valid = verify(token);
+        System.out.println("Valid: " + valid);
+        return verify(token);
+    }
+}

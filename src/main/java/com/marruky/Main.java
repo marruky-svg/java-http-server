@@ -4,20 +4,17 @@ import auth.JwtService;
 import com.marruky.Http.*;
 import com.marruky.Json.JsonParser;
 import com.marruky.Json.JsonSerializer;
-import com.marruky.Routes.Handler;
 import com.marruky.Routes.Router;
 import com.marruky.db.DatabaseConnection;
-import com.marruky.repository.AmrResultRepository;
-import com.marruky.repository.AnalyseResultRepository;
-import com.marruky.repository.AnalysisJobRepository;
-import com.marruky.repository.CompareResultRepository;
+import com.marruky.repository.*;
 
-import javax.management.ObjectName;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Connection;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,35 +23,28 @@ import java.util.concurrent.Executors;
 
 public class Main {
     public static void main(String[] args) {
-        try {
-            JwtService jwt = new JwtService();
-            String token = jwt.generate("elder", "researcher");
-            System.out.println("Token: " + token);
-            System.out.println("Valid: " + jwt.verify(token));
-            System.out.println("Valid fake: " + jwt.verify(token + "x"));
-            System.out.println("Username: " + jwt.getUsername(token));
+        try (ServerSocket serverSocket = new ServerSocket(8082);
+             ExecutorService executor = Executors.newFixedThreadPool(10);) {
 
             Connection conn = DatabaseConnection.getConnection();
-            AnalysisJobRepository jobRepository = new AnalysisJobRepository();
-            int id = jobRepository.save("analyse", "completed");
-            System.out.println("Job saved with id: " + id);
-
-            ServerSocket serverSocket = new ServerSocket(8082);
             System.out.println("Server listen on port 8082");
-            ExecutorService executor = Executors.newFixedThreadPool(10);
-
             Map<String, String> headers = new HashMap<>();
             headers.put("Content-Type", "text/json");
             headers.put("Content-Length", "");
             headers.put("Connection", "");
-            String body_route = "A resposta é esta e esta tudo certo";
-            String body_error = "HE-HE";
+
+
+
+            //============================
+            //         ROUTER
+            //============================
+
             Router router = new Router();
-            router.register("/users", "GET", request -> new HttpResponse(200, "OK", headers, body_route));
-            router.register("/users", "POST", request -> new HttpResponse(201, "CREATED", headers, body_error));
-
-
             router.register("/amr", "POST", request -> {
+                if(!new JwtService().authenticate(request)) {
+                    return new HttpResponse(401, "Unauthorized", headers, "");
+                }
+
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
                 if (validationResult.isValid()) {
@@ -70,7 +60,7 @@ public class Main {
                         Object isoladoId = sequence.get("id");
                         List<Map<String, Object>> genes = (List<Map<String, Object>>) sequence.get("genes");
                         for (Map<String, Object> gene : genes) {
-                          amrId = repo.save(jobId, isoladoId.toString(), gene.get("gene").toString(), gene.get("antibioticClass").toString(),
+                            amrId = repo.save(jobId, isoladoId.toString(), gene.get("gene").toString(), gene.get("antibioticClass").toString(),
                                     Double.parseDouble(gene.get("similarity").toString()), Integer.parseInt(gene.get("score").toString()));
                         }
                     }
@@ -79,6 +69,10 @@ public class Main {
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
             router.register("/compare", "POST", request -> {
+                if(!new JwtService().authenticate(request)) {
+                    return new HttpResponse(401, "Unauthorized", headers, "");
+                }
+
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody(), 2);
                 if (validationResult.isValid()) {
@@ -98,6 +92,10 @@ public class Main {
             });
 
             router.register("/analyse", "POST", request -> {
+                if(!new JwtService().authenticate(request)) {
+                    return new HttpResponse(401, "Unauthorized", headers, "");
+                }
+
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
                 if (validationResult.isValid()) {
@@ -111,14 +109,39 @@ public class Main {
                     int jobId = repo.save("ANALYSE", "completed");
                     for (Map<String, Object> sequence : sequences) {
                         Object isoladoId = sequence.get("id");
-                           analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
-                                    Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
-                                    Double.parseDouble(sequence.get("gcContent").toString()));
+                        analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
+                                Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
+                                Double.parseDouble(sequence.get("gcContent").toString()));
                     }
                     return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
+
+            router.register("/login", "POST", request -> {
+                Map<String, Object> bodyParsed = new JsonParser().parser(request.getBody());
+                String username = bodyParsed.get("username").toString();
+                String password = bodyParsed.get("password").toString();
+                JwtService jwt = new JwtService();
+                String token = "";
+                try {
+                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                    byte[] hash1 = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+                    String passwordHash1 = Base64.getEncoder().encodeToString(hash1);
+                    UserRepository repo = new UserRepository();
+                    if (repo.exists(username, passwordHash1)) {
+                        token = jwt.generate(username, "researcher");
+                        return new HttpResponse(200, "OK", headers, token);
+                    }
+                    return new HttpResponse(401, "Unauthorized", headers, "");
+
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            //============================
+            //         /ROUTER
+            //============================
 
 
             JsonSerializer serializer = new JsonSerializer();
@@ -132,7 +155,6 @@ public class Main {
                 System.out.println("Client is connected");
                 executor.submit(() -> {
                     try {
-
                         HttpRequest request = HttpParser.parser((socket.getInputStream()));
                         System.out.println("Method: " + request.getMethod());
                         System.out.println("Path: " + request.getPath());

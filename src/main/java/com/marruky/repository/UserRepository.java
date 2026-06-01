@@ -2,7 +2,6 @@ package com.marruky.repository;
 
 import com.marruky.db.DatabaseConnection;
 
-import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;

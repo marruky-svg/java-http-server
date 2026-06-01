@@ -35,6 +35,7 @@ public class Main {
 
 
 
+
             //============================
             //         ROUTER
             //============================
@@ -144,12 +145,7 @@ public class Main {
             //============================
 
 
-            JsonSerializer serializer = new JsonSerializer();
-            JsonParser parser = new JsonParser();
-
-            Map<String, Object> data = parser.parser("{\"nome\":\"elder\",\"idade\":25 ,\"altura\": 1.82}");
-            System.out.println(data);
-            System.out.println(serializer.serialize(data));
+            RateLimiter rateLimiter = new RateLimiter();
             while (true) {
                 Socket socket = serverSocket.accept();
                 System.out.println("Client is connected");
@@ -159,6 +155,13 @@ public class Main {
                         System.out.println("Method: " + request.getMethod());
                         System.out.println("Path: " + request.getPath());
                         System.out.println("Body: " + request.getBody());
+                        String ip = socket.getInetAddress().getHostAddress();
+                        if(!rateLimiter.isAllowed(ip)) {
+                            HttpResponse tooMany = new HttpResponse(429, "Too Many Requests", headers, "");
+                            socket.getOutputStream().write(tooMany.toBytes());
+                            socket.close();
+                            return;
+                        }
                         HttpResponse response = router.dispatch(request);
                         byte[] responseBytes = response.toBytes();
                         OutputStream os = socket.getOutputStream();

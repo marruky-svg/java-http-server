@@ -33,7 +33,7 @@ public class Main {
             headers.put("Content-Length", "");
             headers.put("Connection", "");
 
-
+            HttpClient client = new HttpClient();
 
 
             //============================
@@ -42,79 +42,95 @@ public class Main {
 
             Router router = new Router();
             router.register("/amr", "POST", request -> {
-                if(!new JwtService().authenticate(request)) {
+                if (!new JwtService().authenticate(request)) {
                     return new HttpResponse(401, "Unauthorized", headers, "");
                 }
-
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
                 if (validationResult.isValid()) {
-                    HttpClient client = new HttpClient();
-                    String resultBody = client.post("localhost", 8083, "/amr", request.getBody());
-                    JsonParser parser = new JsonParser();
-                    List<Map<String, Object>> sequences = parser.parserArray(resultBody);
-                    AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
-                    AmrResultRepository repo = new AmrResultRepository();
-                    int amrId = 0;
-                    int jobId = analysisJobRepository.save("AMR", "completed");
-                    for (Map<String, Object> sequence : sequences) {
-                        Object isoladoId = sequence.get("id");
-                        List<Map<String, Object>> genes = (List<Map<String, Object>>) sequence.get("genes");
-                        for (Map<String, Object> gene : genes) {
-                            amrId = repo.save(jobId, isoladoId.toString(), gene.get("gene").toString(), gene.get("antibioticClass").toString(),
-                                    Double.parseDouble(gene.get("similarity").toString()), Integer.parseInt(gene.get("score").toString()));
+                    try {
+                        String resultBody = client.post("localhost", 8083, "/amr", request.getBody());
+                        if (resultBody.isEmpty()) {
+                            return new HttpResponse(503, "Service Unavailable", headers, "");
                         }
+                        JsonParser parser = new JsonParser();
+                        List<Map<String, Object>> sequences = parser.parserArray(resultBody);
+                        AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
+                        AmrResultRepository repo = new AmrResultRepository();
+                        int amrId = 0;
+                        int jobId = analysisJobRepository.save("AMR", "completed");
+                        for (Map<String, Object> sequence : sequences) {
+                            Object isoladoId = sequence.get("id");
+                            List<Map<String, Object>> genes = (List<Map<String, Object>>) sequence.get("genes");
+                            for (Map<String, Object> gene : genes) {
+                                amrId = repo.save(jobId, isoladoId.toString(), gene.get("gene").toString(), gene.get("antibioticClass").toString(),
+                                        Double.parseDouble(gene.get("similarity").toString()), Integer.parseInt(gene.get("score").toString()));
+                            }
+                        }
+                        return new HttpResponse(200, "Amr saved with id: " + amrId, headers, resultBody);
+
+                    } catch (RuntimeException e) {
+                        return new HttpResponse(503, "Service Unavailable", headers, "");
                     }
-                    return new HttpResponse(200, "Amr saved with id: " + amrId, headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
             router.register("/compare", "POST", request -> {
-                if(!new JwtService().authenticate(request)) {
+                if (!new JwtService().authenticate(request)) {
                     return new HttpResponse(401, "Unauthorized", headers, "");
                 }
-
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody(), 2);
                 if (validationResult.isValid()) {
-                    HttpClient client = new HttpClient();
-                    String resultBody = client.post("localhost", 8083, "/compare", request.getBody());
-                    JsonParser parser = new JsonParser();
-                    Map<String, Object> sequences = parser.parser(resultBody);
-                    AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
-                    CompareResultRepository repo = new CompareResultRepository();
-                    int jobId = analysisJobRepository.save("COMPARE", "completed");
-                    int compareId = repo.save(jobId, sequences.get("isoladoA").toString(), sequences.get("isoladoB").toString(),
-                            Integer.parseInt(sequences.get("score").toString()), Double.parseDouble(sequences.get("similarity").toString()),
-                            sequences.get("alignedA").toString(), sequences.get("alignedB").toString());
-                    return new HttpResponse(200, "Compare saved with id: " + compareId, headers, resultBody);
+                    try {
+                        String resultBody = client.post("localhost", 8083, "/compare", request.getBody());
+                        if (resultBody.isEmpty()) {
+                            return new HttpResponse(503, "Service Unavailable", headers, "");
+                        }
+                        JsonParser parser = new JsonParser();
+                        Map<String, Object> sequences = parser.parser(resultBody);
+                        AnalysisJobRepository analysisJobRepository = new AnalysisJobRepository();
+                        CompareResultRepository repo = new CompareResultRepository();
+                        int jobId = analysisJobRepository.save("COMPARE", "completed");
+                        int compareId = repo.save(jobId, sequences.get("isoladoA").toString(), sequences.get("isoladoB").toString(),
+                                Integer.parseInt(sequences.get("score").toString()), Double.parseDouble(sequences.get("similarity").toString()),
+                                sequences.get("alignedA").toString(), sequences.get("alignedB").toString());
+                        return new HttpResponse(200, "Compare saved with id: " + compareId, headers, resultBody);
+                    }catch (RuntimeException e) {
+                        return new HttpResponse(503, "Service Unavailable", headers, "");
+                    }
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
 
             router.register("/analyse", "POST", request -> {
-                if(!new JwtService().authenticate(request)) {
+                if (!new JwtService().authenticate(request)) {
                     return new HttpResponse(401, "Unauthorized", headers, "");
                 }
-
                 FastaValidator validator = new FastaValidator();
                 FastaValidator.ValidationResult validationResult = validator.validade(request.getBody());
                 if (validationResult.isValid()) {
-                    HttpClient client = new HttpClient();
-                    String resultBody = client.post("localhost", 8083, "/analyse", request.getBody());
-                    JsonParser parser = new JsonParser();
-                    int analyseId = 0;
-                    List<Map<String, Object>> sequences = parser.parserArray(resultBody);
-                    AnalysisJobRepository repo = new AnalysisJobRepository();
-                    AnalyseResultRepository analyseResultRepository = new AnalyseResultRepository();
-                    int jobId = repo.save("ANALYSE", "completed");
-                    for (Map<String, Object> sequence : sequences) {
-                        Object isoladoId = sequence.get("id");
-                        analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
-                                Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
-                                Double.parseDouble(sequence.get("gcContent").toString()));
+                    try {
+                        String resultBody = client.post("localhost", 8083, "/analyse", request.getBody());
+                        if (resultBody.isEmpty()) {
+                            return new HttpResponse(503, "Service Unavailable", headers, "");
+                        }
+                        JsonParser parser = new JsonParser();
+                        int analyseId = 0;
+                        List<Map<String, Object>> sequences = parser.parserArray(resultBody);
+                        AnalysisJobRepository repo = new AnalysisJobRepository();
+                        AnalyseResultRepository analyseResultRepository = new AnalyseResultRepository();
+                        int jobId = repo.save("ANALYSE", "completed");
+                        for (Map<String, Object> sequence : sequences) {
+                            Object isoladoId = sequence.get("id");
+                            analyseId = analyseResultRepository.save(jobId, isoladoId.toString(), Integer.parseInt(sequence.get("length").toString()), Integer.parseInt(sequence.get("countA").toString()),
+                                    Integer.parseInt(sequence.get("countT").toString()), Integer.parseInt(sequence.get("countC").toString()), Integer.parseInt(sequence.get("countG").toString()),
+                                    Double.parseDouble(sequence.get("gcContent").toString()));
+                        }
+                        return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
+                    }catch (RuntimeException e){
+                        return new HttpResponse(503, "Service Unavailable", headers, "");
                     }
-                    return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
                 }
                 return new HttpResponse(400, validationResult.getErrorMensage(), headers, "");
             });
@@ -156,7 +172,7 @@ public class Main {
                         System.out.println("Path: " + request.getPath());
                         System.out.println("Body: " + request.getBody());
                         String ip = socket.getInetAddress().getHostAddress();
-                        if(!rateLimiter.isAllowed(ip)) {
+                        if (!rateLimiter.isAllowed(ip)) {
                             HttpResponse tooMany = new HttpResponse(429, "Too Many Requests", headers, "");
                             socket.getOutputStream().write(tooMany.toBytes());
                             socket.close();

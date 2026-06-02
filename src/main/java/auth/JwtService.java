@@ -94,14 +94,17 @@ public class JwtService {
 
     public boolean authenticate(HttpRequest request) {
         String authHeader = request.getHeaders().get("Authorization");
-        System.out.println("Auth header: " + authHeader);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (authHeader == null){
+            return false;
+        }
+        authHeader = authHeader.trim();
+        if (!authHeader.startsWith("Bearer ")) {
             return false;
         }
         String token = authHeader.substring(7);
         System.out.println("Token: " + token);
         boolean valid = verify(token);
         System.out.println("Valid: " + valid);
-        return verify(token);
+        return valid;
     }
 }

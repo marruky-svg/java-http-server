@@ -14,6 +14,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -96,7 +97,7 @@ public class Main {
                                 Integer.parseInt(sequences.get("score").toString()), Double.parseDouble(sequences.get("similarity").toString()),
                                 sequences.get("alignedA").toString(), sequences.get("alignedB").toString());
                         return new HttpResponse(200, "Compare saved with id: " + compareId, headers, resultBody);
-                    }catch (RuntimeException e) {
+                    } catch (RuntimeException e) {
                         return new HttpResponse(503, "Service Unavailable", headers, "");
                     }
                 }
@@ -128,7 +129,7 @@ public class Main {
                                     Double.parseDouble(sequence.get("gcContent").toString()));
                         }
                         return new HttpResponse(200, "Analyse created with id: " + analyseId, headers, resultBody);
-                    }catch (RuntimeException e){
+                    } catch (RuntimeException e) {
                         return new HttpResponse(503, "Service Unavailable", headers, "");
                     }
                 }
@@ -154,6 +155,36 @@ public class Main {
 
                 } catch (Exception e) {
                     throw new RuntimeException(e);
+                }
+            });
+
+            router.register("/register", "POST", request -> {
+                JsonParser parser = new JsonParser();
+                Map<String, Object> bodyParsed = parser.parser(request.getBody());
+                String username = bodyParsed.get("username").toString();
+                String password = bodyParsed.get("password").toString();
+                if(username.isEmpty()) {
+                    return new HttpResponse(400, "Bad Request", headers, "");
+                }
+                try {
+                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                    byte[] hash = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+                    String passwordHash = Base64.getEncoder().encodeToString(hash);
+                    UserRepository repo = new UserRepository();
+                    repo.save(username, passwordHash, "researcher");
+                    return new HttpResponse(201, "Created", headers, "");
+
+                }catch (RuntimeException e) {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof SQLException) {
+                        String sqlState = ((SQLException) cause).getSQLState();
+                        if(sqlState != null && sqlState.equals("23505")){
+                            return new HttpResponse(409, "Conflict", headers, "");
+                        }
+                    }
+                    return new HttpResponse(500, "Internal Server Error", headers, "");
+                } catch (Exception e) {
+                    return new HttpResponse(500, "Internal Server Error", headers, "");
                 }
             });
             //============================
